@@ -12597,6 +12597,10 @@ class GatewayRunner:
 
         # Effort level change
         effort = args.strip()
+        display_effort = "max" if effort == "xhigh" else effort
+        if effort == "max":
+            effort = "xhigh"
+            display_effort = "max"
         if effort == "reset":
             if persist_global:
                 return t("gateway.reasoning.reset_global_unsupported")
@@ -12619,14 +12623,14 @@ class GatewayRunner:
             if _save_config_key("agent.reasoning_effort", effort):
                 self._set_session_reasoning_override(session_key, None)
                 self._evict_cached_agent(session_key)
-                return t("gateway.reasoning.set_global", effort=effort)
+                return t("gateway.reasoning.set_global", effort=display_effort)
             self._set_session_reasoning_override(session_key, parsed)
             self._evict_cached_agent(session_key)
-            return t("gateway.reasoning.set_global_save_failed", effort=effort)
+            return t("gateway.reasoning.set_global_save_failed", effort=display_effort)
 
         self._set_session_reasoning_override(session_key, parsed)
         self._evict_cached_agent(session_key)
-        return t("gateway.reasoning.set_session", effort=effort)
+        return t("gateway.reasoning.set_session", effort=display_effort)
 
     async def _handle_fast_command(self, event: MessageEvent) -> str:
         """Handle /fast — mirror the CLI Priority Processing toggle in gateway chats."""

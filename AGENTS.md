@@ -1155,3 +1155,87 @@ not the specific names.
 
 Reviewers should reject new change-detector tests; authors should convert
 them into invariants before re-requesting review.
+
+## UNIVERSAL AI VERIFICATION STANDARD
+
+For any code, config, Git, deployment, service, or system change:
+
+1. Check current state first with read-only commands.
+2. Make the smallest safe change.
+3. Verify the actual result with terminal commands.
+4. Do not say “fixed,” “complete,” “working,” or “done” unless verification proves it.
+5. If verification fails, say clearly: “Not fixed yet.”
+6. For code changes, run syntax checks or relevant tests when practical.
+7. For Git changes, show:
+   - git status --short
+   - git diff --stat
+   - focused grep/readback proving the intended change
+8. For services, show:
+   - systemctl --user status <service> --no-pager | head
+   - logs if needed
+9. For UI behavior, verify the exact code path controlling the UI.
+10. If an approval is denied, do not continue as if the denied command succeeded.
+11. Reports must include evidence commands and actual results, not just claims.
+12. If unsure which file/tool is active, inspect paths first instead of guessing.
+13. Do not put the burden on Antonio to remember verification steps. The agent must proactively verify and show evidence.
+
+Specific failure to prevent:
+Never claim `_run_curses_picker` was removed from `/effort` or `/reasoning` unless grep/readback proves the active path no longer calls it.
+
+## REQUIRED COMPLETION GATE
+
+Every AI agent/tool must follow this gate before claiming any task is complete.
+
+The agent must not rely on Antonio to remember or request these checks. The agent must proactively run them and show evidence.
+
+### 1. Identify Active Target
+Before changing anything, show:
+- current folder: `pwd`
+- active repo/path
+- files expected to change
+
+### 2. Pre-Change Check
+Before editing, run read-only checks appropriate to the task:
+- `git status --short`
+- relevant `grep`, `sed`, `find`, or config readback
+- service status if services are involved
+
+### 3. Minimal Change
+Make the smallest safe change only.
+Do not touch unrelated files.
+Do not change tokens, remotes, model settings, voice settings, deploy settings, or services unless explicitly asked.
+
+### 4. Post-Change Verification
+After editing, run proof commands:
+- code: syntax check or relevant test
+- Git: `git status --short` and `git diff --stat`
+- UI behavior: grep/readback the exact active code path
+- services: `systemctl --user status <service> --no-pager | head`
+- deployment: live curl/check command
+
+### 5. Evidence Report
+Final report must include:
+- files changed
+- commands actually run
+- actual command output or summary
+- what passed
+- what failed
+- remaining dirty files
+- one next step only
+
+### 6. Honesty Rule
+Do not say “fixed,” “done,” “complete,” or “working” unless verification passed.
+
+If verification did not pass, say exactly:
+`NOT FIXED YET`
+
+Then explain what failed.
+
+### 7. Denied/Failed Command Rule
+If a command was denied, failed, skipped, or not run, the agent must not act like it succeeded.
+
+### 8. No Burden on Antonio
+Do not tell Antonio to remember verification steps.
+Do not make Antonio be the quality-control system.
+The agent must self-check and present proof automatically.
+
