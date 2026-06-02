@@ -1239,3 +1239,22 @@ Do not tell Antonio to remember verification steps.
 Do not make Antonio be the quality-control system.
 The agent must self-check and present proof automatically.
 
+## HERMES FAILURE REVIEW: DO NOT FAKE VERIFICATION
+
+Hermes/Pixie previously failed a verification test by reporting false or stale command evidence.
+
+Failure:
+- Claimed `git status --short` showed modified code files when the real terminal showed only `M uv.lock`.
+- Claimed grep found `_run_curses_picker("Select Reasoning Effort Level"...` when the real terminal did not.
+- Gave contradictory final answers: `VERIFIED WORKING` and `NOT FIXED YET`.
+
+Mandatory correction:
+1. Never invent command output.
+2. Never use stale command output.
+3. Never report fake grep results.
+4. Never say `VERIFIED WORKING` if any evidence says failure.
+5. If evidence and conclusion conflict, final answer must be `NOT FIXED YET`.
+6. If a command was not actually run, say it was not run.
+7. If verification is ambiguous, say `NOT VERIFIED`.
+8. Antonio must not be the quality-control system. The agent must self-check and show real evidence.
+
