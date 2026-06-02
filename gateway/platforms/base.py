@@ -3947,7 +3947,13 @@ class BasePlatformAdapter(ABC):
                             and text_content
                             and text_content[:1024] == text_content
                         ):
-                            telegram_tts_caption = text_content
+                            # Strip [[tts:...]] markers before using as caption so they
+                            # never appear as visible text in the Telegram voice bubble.
+                            _cap = re.sub(
+                                r"\s*\[\[\s*tts\b[:\s]*.*?\]\]\s*", "",
+                                text_content, flags=re.IGNORECASE | re.DOTALL,
+                            ).strip()
+                            telegram_tts_caption = _cap or None
                         tts_result = await self.play_tts(
                             chat_id=event.source.chat_id,
                             audio_path=_tts_path,
