@@ -5343,6 +5343,37 @@ class TelegramAdapter(BasePlatformAdapter):
         event = self._build_message_event(msg, MessageType.TEXT, update_id=update.update_id)
         event.text = self._clean_bot_trigger_text(event.text)
         event = self._apply_telegram_group_observe_attribution(event)
+
+        # LionGateOS hard rail: Pulse Check is deterministic/report-only.
+        # Do not send this through the model; run the trusted local script and stop.
+        if (event.text or "").strip().lower() == "pulse check":
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "python3",
+                    "/home/liongateos/liongateos/tools/pulse-check.py",
+                    cwd="/home/liongateos/liongateos",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await proc.communicate()
+                if proc.returncode == 0:
+                    pulse_text = stdout.decode("utf-8", errors="replace").strip()
+                else:
+                    pulse_text = "Pulse Check failed.\n" + stderr.decode("utf-8", errors="replace").strip()
+            except Exception as exc:
+                logger.exception("LionGateOS Pulse Check shortcut failed")
+                pulse_text = f"Pulse Check failed: {exc}"
+
+            if not pulse_text:
+                pulse_text = "Pulse Check returned no output."
+
+            await self._clean_send_message(
+                chat_id=msg.chat_id,
+                text=pulse_text[:4096],
+                reply_to_message_id=msg.message_id,
+            )
+            return
+
         self._enqueue_text_event(event)
 
     async def _handle_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
