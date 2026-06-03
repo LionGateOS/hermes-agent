@@ -5346,7 +5346,18 @@ class TelegramAdapter(BasePlatformAdapter):
 
         # LionGateOS hard rail: Pulse Check is deterministic/report-only.
         # Do not send this through the model; run the trusted local script and stop.
-        if (event.text or "").strip().lower() == "pulse check":
+        liongate_task_status_triggers = {
+            "pulse check",
+            "status",
+            "task board",
+            "what's the task",
+            "whats the task",
+            "what is the task",
+            "what's next",
+            "whats next",
+            "what is next",
+        }
+        if (event.text or "").strip().lower() in liongate_task_status_triggers:
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "python3",
