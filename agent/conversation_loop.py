@@ -424,6 +424,27 @@ def run_conversation(
     if isinstance(persist_user_message, str):
         persist_user_message = _sanitize_surrogates(persist_user_message)
 
+    # LionGateOS hard rail: if the user explicitly says inspect-only/read-only,
+    # this turn must not execute mutating tools. The executor enforces this.
+    _lg_readonly_text = user_message.lower() if isinstance(user_message, str) else ""
+    agent._liongate_inspect_only_readonly = any(
+        phrase in _lg_readonly_text
+        for phrase in (
+            "inspect only",
+            "read only",
+            "read-only",
+            "do not edit",
+            "don't edit",
+            "no edits",
+            "do not modify",
+            "do not write",
+            "do not create",
+            "do not move",
+            "do not delete",
+            "do not commit",
+        )
+    )
+
     # Store stream callback for _interruptible_api_call to pick up
     agent._stream_callback = stream_callback
     agent._persist_user_message_idx = None

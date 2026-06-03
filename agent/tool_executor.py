@@ -51,6 +51,27 @@ logger = logging.getLogger(__name__)
 # Mirrors the constant in ``run_agent`` for tests/imports that look here.
 _MAX_TOOL_WORKERS = 8
 
+# LionGateOS inspect-only hard rail.
+# When enabled for a turn, only non-mutating inspection tools may run.
+_LIONGATE_INSPECT_ONLY_ALLOWED_TOOLS = frozenset(
+    {
+        "read_file",
+        "search_files",
+        "web_search",
+        "web_extract",
+        "browser_snapshot",
+        "browser_console",
+        "mcp_filesystem_read_file",
+        "mcp_filesystem_read_text_file",
+        "mcp_filesystem_read_multiple_files",
+        "mcp_filesystem_list_directory",
+        "mcp_filesystem_list_directory_with_sizes",
+        "mcp_filesystem_directory_tree",
+        "mcp_filesystem_get_file_info",
+        "mcp_filesystem_search_files",
+    }
+)
+
 
 def _ra():
     """Lazy reference to ``run_agent`` so patches like ``run_agent._set_interrupt`` work."""
@@ -188,6 +209,21 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
         if _ts_scope_block is not None:
             # Out-of-scope tool_call: reject before hooks/guardrails/dispatch.
             block_result = _ts_scope_block
+        elif (
+            getattr(agent, "_liongate_inspect_only_readonly", False)
+            and function_name not in _LIONGATE_INSPECT_ONLY_ALLOWED_TOOLS
+        ):
+            block_result = json.dumps(
+                {
+                    "error": (
+                        "LionGateOS inspect-only hard rail blocked tool "
+                        f"{function_name!r}. This turn is read-only because "
+                        "the user requested inspect-only/no-edits behavior."
+                    )
+                },
+                ensure_ascii=False,
+            )
+            blocked_by_guardrail = True
         else:
             try:
                 from hermes_cli.plugins import get_pre_tool_call_block_message
@@ -594,6 +630,20 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         _block_msg: Optional[str] = None
         if _ts_scope_block is not None:
             _block_msg = _ts_scope_block
+        elif (
+            getattr(agent, "_liongate_inspect_only_readonly", False)
+            and function_name not in _LIONGATE_INSPECT_ONLY_ALLOWED_TOOLS
+        ):
+            _block_msg = json.dumps(
+                {
+                    "error": (
+                        "LionGateOS inspect-only hard rail blocked tool "
+                        f"{function_name!r}. This turn is read-only because "
+                        "the user requested inspect-only/no-edits behavior."
+                    )
+                },
+                ensure_ascii=False,
+            )
         else:
             try:
                 from hermes_cli.plugins import get_pre_tool_call_block_message
