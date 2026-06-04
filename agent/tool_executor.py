@@ -79,6 +79,32 @@ def _ra():
     return run_agent
 
 
+def _liongate_tool_call_budget_block(agent, function_name: str) -> Optional[str]:
+    """Return a block message when the user-stated per-turn tool limit is exhausted."""
+    limit = getattr(agent, "_liongate_turn_tool_call_limit", None)
+    if not isinstance(limit, int):
+        return None
+
+    used = getattr(agent, "_liongate_turn_tool_calls_used", 0)
+    if not isinstance(used, int):
+        used = 0
+
+    if used >= limit:
+        return json.dumps(
+            {
+                "error": (
+                    "LionGateOS tool-call budget hard rail blocked tool "
+                    f"{function_name!r}. This turn is limited to {limit} tool call(s) "
+                    "because the user explicitly requested a tool-call limit."
+                )
+            },
+            ensure_ascii=False,
+        )
+
+    agent._liongate_turn_tool_calls_used = used + 1
+    return None
+
+
 def _tool_search_scoped_names(agent) -> frozenset:
     """Return the deferrable tool names the session may invoke via tool_call.
 
@@ -209,7 +235,12 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
         if _ts_scope_block is not None:
             # Out-of-scope tool_call: reject before hooks/guardrails/dispatch.
             block_result = _ts_scope_block
-        elif (
+        else:
+            block_result = _liongate_tool_call_budget_block(agent, function_name)
+            if block_result is not None:
+                blocked_by_guardrail = True
+
+        if block_result is None and (
             getattr(agent, "_liongate_inspect_only_readonly", False)
             and function_name not in _LIONGATE_INSPECT_ONLY_ALLOWED_TOOLS
         ):
@@ -630,7 +661,10 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         _block_msg: Optional[str] = None
         if _ts_scope_block is not None:
             _block_msg = _ts_scope_block
-        elif (
+        else:
+            _block_msg = _liongate_tool_call_budget_block(agent, function_name)
+
+        if _block_msg is None and (
             getattr(agent, "_liongate_inspect_only_readonly", False)
             and function_name not in _LIONGATE_INSPECT_ONLY_ALLOWED_TOOLS
         ):

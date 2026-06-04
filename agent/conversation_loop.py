@@ -445,6 +445,23 @@ def run_conversation(
         )
     )
 
+    # LionGateOS hard rail: enforce explicit per-turn tool-call budgets such as
+    # "use no more than 5 tool calls" or "max 3 tools". The executor blocks
+    # tools beyond this limit mechanically instead of trusting the model.
+    agent._liongate_turn_tool_call_limit = None
+    agent._liongate_turn_tool_calls_used = 0
+    _lg_tool_limit_match = re.search(
+        r"(?:no more than|at most|max(?:imum)?|limit(?:ed)? to)\s+(\d{1,2})\s+(?:tool calls?|tools?)",
+        _lg_readonly_text,
+    )
+    if _lg_tool_limit_match:
+        try:
+            _lg_tool_limit = int(_lg_tool_limit_match.group(1))
+            if 0 <= _lg_tool_limit <= 50:
+                agent._liongate_turn_tool_call_limit = _lg_tool_limit
+        except Exception:
+            agent._liongate_turn_tool_call_limit = None
+
     # Store stream callback for _interruptible_api_call to pick up
     agent._stream_callback = stream_callback
     agent._persist_user_message_idx = None
