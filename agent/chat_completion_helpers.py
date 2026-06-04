@@ -784,6 +784,59 @@ def build_api_kwargs(agent, api_messages: list) -> dict:
 
 
 
+def _liongate_completion_claim_without_verification(content: str) -> bool:
+    """Return True when a final answer claims done/fixed/complete without proof."""
+    if not isinstance(content, str) or not content.strip():
+        return False
+
+    lowered = content.lower()
+
+    # If the answer already labels uncertainty or shows verification evidence, allow it.
+    evidence_markers = (
+        "not verified",
+        "not fixed yet",
+        "verification:",
+        "verified:",
+        "proof:",
+        "evidence:",
+        "terminal verified",
+        "test passed",
+        "tests passed",
+        "build passed",
+        "syntax ok",
+        "git status",
+        "curl ",
+        "pytest",
+        "exit code 0",
+        "good:",
+    )
+    if any(marker in lowered for marker in evidence_markers):
+        return False
+
+    claim_words = (
+        "done",
+        "fixed",
+        "complete",
+        "completed",
+        "finished",
+        "resolved",
+        "working now",
+        "successfully",
+    )
+
+    for word in claim_words:
+        idx = lowered.find(word)
+        if idx == -1:
+            continue
+        before = lowered[max(0, idx - 24):idx]
+        # Do not block honest negative statements.
+        if any(neg in before for neg in ("not ", "isn't ", "wasn't ", "cannot ", "can't ", "do not ", "don't ", "no ")):
+            continue
+        return True
+
+    return False
+
+
 def build_assistant_message(agent, assistant_message, finish_reason: str) -> dict:
     """Build a normalized assistant message dict from an API response message.
 
@@ -853,6 +906,21 @@ def build_assistant_message(agent, assistant_message, finish_reason: str) -> dic
     if isinstance(_san_content, str) and _san_content:
         from agent.redact import redact_sensitive_text
         _san_content = redact_sensitive_text(_san_content)
+
+    # LionGateOS hard rail: do not allow unverified "done/fixed/complete"
+    # claims to leave the final-message boundary without an explicit warning.
+    if (
+        isinstance(_san_content, str)
+        and _san_content
+        and not assistant_tool_calls
+        and _liongate_completion_claim_without_verification(_san_content)
+    ):
+        _san_content = (
+            "NOT VERIFIED: This response contained a done/fixed/complete claim "
+            "without verification evidence. Treat the task as not proven until "
+            "verification is shown.\n\n"
+            + _san_content
+        )
 
     msg = {
         "role": "assistant",

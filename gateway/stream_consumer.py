@@ -35,6 +35,69 @@ from gateway.config import (
 
 logger = logging.getLogger("gateway.stream_consumer")
 
+
+def _liongate_completion_claim_without_verification(content: str) -> bool:
+    """Return True when a final visible answer claims done/fixed/complete without proof."""
+    if not isinstance(content, str) or not content.strip():
+        return False
+
+    lowered = content.lower()
+
+    evidence_markers = (
+        "not verified",
+        "not fixed yet",
+        "verification:",
+        "verified:",
+        "proof:",
+        "evidence:",
+        "terminal verified",
+        "test passed",
+        "tests passed",
+        "build passed",
+        "syntax ok",
+        "git status",
+        "curl ",
+        "pytest",
+        "exit code 0",
+        "good:",
+    )
+    if any(marker in lowered for marker in evidence_markers):
+        return False
+
+    claim_words = (
+        "done",
+        "fixed",
+        "complete",
+        "completed",
+        "finished",
+        "resolved",
+        "working now",
+        "successfully",
+    )
+
+    for word in claim_words:
+        idx = lowered.find(word)
+        if idx == -1:
+            continue
+        before = lowered[max(0, idx - 24):idx]
+        if any(neg in before for neg in ("not ", "isn't ", "wasn't ", "cannot ", "can't ", "do not ", "don't ", "no ")):
+            continue
+        return True
+
+    return False
+
+
+def _liongate_protect_completion_claim(content: str) -> str:
+    if _liongate_completion_claim_without_verification(content):
+        return (
+            "NOT VERIFIED: This response contained a done/fixed/complete claim "
+            "without verification evidence. Treat the task as not proven until "
+            "verification is shown.\n\n"
+            + content
+        )
+    return content
+
+
 # Sentinel to signal the stream is complete
 _DONE = object()
 
@@ -755,6 +818,7 @@ class GatewayStreamConsumer:
         Retries each chunk once on flood-control failures with a short delay.
         """
         final_text = self._clean_for_display(text)
+        final_text = _liongate_protect_completion_claim(final_text)
         continuation = self._continuation_text(final_text)
         self._fallback_final_send = False
         if not continuation.strip():
@@ -1142,6 +1206,8 @@ class GatewayStreamConsumer:
         # Media files are delivered as native attachments after the stream
         # finishes (via _deliver_media_from_response in gateway/run.py).
         text = self._clean_for_display(text)
+        if finalize or is_turn_final:
+            text = _liongate_protect_completion_claim(text)
         # A bare streaming cursor is not meaningful user-visible content and
         # can render as a stray tofu/white-box message on some clients.
         visible_without_cursor = text
