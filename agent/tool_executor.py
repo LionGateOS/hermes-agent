@@ -143,10 +143,31 @@ def _liongate_away_safety_block(agent, function_name: str, function_args: dict) 
         risky = True
         reason = "skill or memory modification"
     elif function_name == "terminal":
-        cmd = str(function_args.get("command", "") or "")
-        if _is_destructive_command(cmd) or _LIONGATE_AWAY_RISKY_TERMINAL.search(cmd):
+        cmd = str(function_args.get("command", "") or "").strip()
+        readonly_terminal = re.compile(
+            r"""^\s*(?:
+                pwd\b|
+                ls\b|
+                find\b|
+                grep\b|
+                sed\s+-n\b|
+                head\b|
+                tail\b|
+                cat\b|
+                git\s+(?:status|diff|log|show|branch)\b|
+                systemctl\s+.*\b(?:status|is-active)\b|
+                curl\s+(?:-s|-S|-f|-L|-I|\s)*https?://|
+                python3?\s+-\s*<<
+            )""",
+            re.IGNORECASE | re.VERBOSE,
+        )
+        if (
+            not readonly_terminal.search(cmd)
+            or _is_destructive_command(cmd)
+            or _LIONGATE_AWAY_RISKY_TERMINAL.search(cmd)
+        ):
             risky = True
-            reason = "risky terminal command"
+            reason = "terminal command not proven read-only"
 
     if not risky:
         return None
