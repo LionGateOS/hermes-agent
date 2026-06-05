@@ -144,6 +144,15 @@ def _liongate_away_safety_block(agent, function_name: str, function_args: dict) 
         reason = "skill or memory modification"
     elif function_name == "terminal":
         cmd = str(function_args.get("command", "") or "").strip()
+        # Allow one safe leading directory change before a read-only command.
+        # Example: cd /home/liongateos/liongateos && git status --short
+        cmd_for_readonly_check = re.sub(
+            r"^\s*cd\s+[^;&|`]+\s*&&\s*",
+            "",
+            cmd,
+            count=1,
+            flags=re.IGNORECASE,
+        )
         readonly_terminal = re.compile(
             r"""^\s*(?:
                 pwd\b|
@@ -162,7 +171,7 @@ def _liongate_away_safety_block(agent, function_name: str, function_args: dict) 
             re.IGNORECASE | re.VERBOSE,
         )
         if (
-            not readonly_terminal.search(cmd)
+            not readonly_terminal.search(cmd_for_readonly_check)
             or _is_destructive_command(cmd)
             or _LIONGATE_AWAY_RISKY_TERMINAL.search(cmd)
         ):
@@ -765,7 +774,8 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                 },
                 ensure_ascii=False,
             )
-        else:
+
+        if _block_msg is None:
             try:
                 from hermes_cli.plugins import get_pre_tool_call_block_message
                 _block_msg = get_pre_tool_call_block_message(

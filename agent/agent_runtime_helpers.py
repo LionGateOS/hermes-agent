@@ -1645,6 +1645,14 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
             from agent.tool_dispatch_helpers import _is_destructive_command as _lg_is_destructive_command
 
             _lg_cmd = str(function_args.get("command", "") or "").strip()
+            # Allow one safe leading directory change before a read-only command.
+            _lg_cmd_for_readonly_check = _lg_re.sub(
+                r"^\s*cd\s+[^;&|`]+\s*&&\s*",
+                "",
+                _lg_cmd,
+                count=1,
+                flags=_lg_re.IGNORECASE,
+            )
             _lg_readonly_terminal = _lg_re.compile(
                 r"""^\s*(?:
                     pwd\b|
@@ -1662,7 +1670,7 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
                 )""",
                 _lg_re.IGNORECASE | _lg_re.VERBOSE,
             )
-            if not _lg_readonly_terminal.search(_lg_cmd) or _lg_is_destructive_command(_lg_cmd):
+            if not _lg_readonly_terminal.search(_lg_cmd_for_readonly_check) or _lg_is_destructive_command(_lg_cmd):
                 return json.dumps(
                     {
                         "error": (
