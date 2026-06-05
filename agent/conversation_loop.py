@@ -462,6 +462,44 @@ def run_conversation(
         except Exception:
             agent._liongate_turn_tool_call_limit = None
 
+    # LionGateOS hard rail: away/unattended safety mode.
+    # Channel-agnostic: applies to non-local platforms such as Telegram, API/Desktop,
+    # future mobile, and any explicit user wording that says the user is away.
+    _lg_platform = str(getattr(agent, "platform", "") or "").lower()
+    agent._liongate_away_safety_mode = (
+        _lg_platform not in ("", "cli", "local")
+        or any(
+            phrase in _lg_readonly_text
+            for phrase in (
+                "away mode",
+                "unattended",
+                "while i am away",
+                "when i am away",
+                "not at my desk",
+                "away from my desk",
+                "from my phone",
+                "mobile",
+                "at work",
+            )
+        )
+    )
+    agent._liongate_away_safety_approved = any(
+        phrase in _lg_readonly_text
+        for phrase in (
+            "i approve",
+            "approved",
+            "approval granted",
+            "you may edit",
+            "you may modify",
+            "you may write",
+            "you may commit",
+            "you may push",
+            "you may deploy",
+            "you may restart",
+            "supervised mode",
+        )
+    )
+
     # Store stream callback for _interruptible_api_call to pick up
     agent._stream_callback = stream_callback
     agent._persist_user_message_idx = None

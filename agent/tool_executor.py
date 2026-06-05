@@ -16,6 +16,7 @@ import concurrent.futures
 import json
 import logging
 import os
+import re
 import random
 import threading
 import time
@@ -103,6 +104,63 @@ def _liongate_tool_call_budget_block(agent, function_name: str) -> Optional[str]
 
     agent._liongate_turn_tool_calls_used = used + 1
     return None
+
+
+_LIONGATE_AWAY_RISKY_TERMINAL = re.compile(
+    r"""(?:^|\s|&&|\|\||;)(?:
+        git\s+(?:commit|push|pull|merge|rebase|reset|clean|checkout)\b|
+        systemctl\s+.*\b(?:restart|stop|start|enable|disable|reload|daemon-reload)\b|
+        service\s+\S+\s+(?:restart|stop|start|reload)\b|
+        pkill\b|killall\b|
+        netlify\s+deploy\b|
+        wrangler\s+pages\s+deploy\b|
+        npm\s+(?:install|i|update|publish)\b|
+        uv\s+(?:sync|add|remove|pip\s+install)\b|
+        pip3?\s+install\b|
+        apt(?:-get)?\s+(?:install|remove|purge|upgrade|dist-upgrade)\b|
+        snap\s+(?:install|remove|refresh)\b|
+        flatpak\s+(?:install|remove|update)\b|
+        docker\s+(?:compose\s+)?(?:up|down|run|start|stop|restart|rm|rmi|pull|push)\b
+    )""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _liongate_away_safety_block(agent, function_name: str, function_args: dict) -> Optional[str]:
+    """Block risky work when the user is away/unattended unless same-turn approval exists."""
+    if not getattr(agent, "_liongate_away_safety_mode", False):
+        return None
+    if getattr(agent, "_liongate_away_safety_approved", False):
+        return None
+
+    risky = False
+    reason = ""
+
+    if function_name in {"write_file", "patch"}:
+        risky = True
+        reason = "file modification"
+    elif function_name in {"skill_manage", "memory"}:
+        risky = True
+        reason = "skill or memory modification"
+    elif function_name == "terminal":
+        cmd = str(function_args.get("command", "") or "")
+        if _is_destructive_command(cmd) or _LIONGATE_AWAY_RISKY_TERMINAL.search(cmd):
+            risky = True
+            reason = "risky terminal command"
+
+    if not risky:
+        return None
+
+    return json.dumps(
+        {
+            "error": (
+                "LionGateOS away/unattended safety hard rail blocked "
+                f"{function_name!r} ({reason}). Inspect/read-only work is allowed, "
+                "but risky changes require explicit same-turn approval."
+            )
+        },
+        ensure_ascii=False,
+    )
 
 
 def _tool_search_scoped_names(agent) -> frozenset:
@@ -237,6 +295,11 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
             block_result = _ts_scope_block
         else:
             block_result = _liongate_tool_call_budget_block(agent, function_name)
+            if block_result is not None:
+                blocked_by_guardrail = True
+
+        if block_result is None:
+            block_result = _liongate_away_safety_block(agent, function_name, function_args)
             if block_result is not None:
                 blocked_by_guardrail = True
 
@@ -663,6 +726,9 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
             _block_msg = _ts_scope_block
         else:
             _block_msg = _liongate_tool_call_budget_block(agent, function_name)
+
+        if _block_msg is None:
+            _block_msg = _liongate_away_safety_block(agent, function_name, function_args)
 
         if _block_msg is None and (
             getattr(agent, "_liongate_inspect_only_readonly", False)
