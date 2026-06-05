@@ -1625,6 +1625,22 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
     if block_message is not None:
         return json.dumps({"error": block_message}, ensure_ascii=False)
 
+    # LionGateOS hard rail: second-layer away/unattended safety stop.
+    # Some registry-dispatched tools can reach invoke_tool after earlier preflight.
+    # Never let file/memory/skill mutations pass here during away mode unless approved.
+    if getattr(agent, "_liongate_away_safety_mode", False) and not getattr(agent, "_liongate_away_safety_approved", False):
+        if function_name in {"write_file", "patch", "skill_manage", "memory"}:
+            return json.dumps(
+                {
+                    "error": (
+                        "LionGateOS away/unattended safety hard rail blocked "
+                        f"{function_name!r}. Inspect/read-only work is allowed, "
+                        "but risky changes require explicit same-turn approval."
+                    )
+                },
+                ensure_ascii=False,
+            )
+
     if function_name == "todo":
         from tools.todo_tool import todo_tool as _todo_tool
         return _todo_tool(
