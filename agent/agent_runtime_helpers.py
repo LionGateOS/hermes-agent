@@ -1640,6 +1640,39 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
                 },
                 ensure_ascii=False,
             )
+        if function_name == "terminal":
+            import re as _lg_re
+            from agent.tool_dispatch_helpers import _is_destructive_command as _lg_is_destructive_command
+
+            _lg_cmd = str(function_args.get("command", "") or "").strip()
+            _lg_readonly_terminal = _lg_re.compile(
+                r"""^\s*(?:
+                    pwd\b|
+                    ls\b|
+                    find\b|
+                    grep\b|
+                    sed\s+-n\b|
+                    head\b|
+                    tail\b|
+                    cat\b|
+                    git\s+(?:status|diff|log|show|branch)\b|
+                    systemctl\s+.*\b(?:status|is-active)\b|
+                    curl\s+(?:-s|-S|-f|-L|-I|\s)*https?://|
+                    python3?\s+-\s*<<
+                )""",
+                _lg_re.IGNORECASE | _lg_re.VERBOSE,
+            )
+            if not _lg_readonly_terminal.search(_lg_cmd) or _lg_is_destructive_command(_lg_cmd):
+                return json.dumps(
+                    {
+                        "error": (
+                            "LionGateOS away/unattended safety hard rail blocked "
+                            "'terminal'. Terminal commands must be clearly read-only "
+                            "during away mode unless explicitly approved."
+                        )
+                    },
+                    ensure_ascii=False,
+                )
 
     if function_name == "todo":
         from tools.todo_tool import todo_tool as _todo_tool
