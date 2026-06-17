@@ -5,7 +5,12 @@ import threading
 from pathlib import Path
 from unittest.mock import patch
 
-from tools.registry import ToolRegistry, _module_registers_tools, discover_builtin_tools
+from tools.registry import (
+    ToolRegistry,
+    ToolSafetyAnnotations,
+    _module_registers_tools,
+    discover_builtin_tools,
+)
 
 
 def _dummy_handler(args, **kwargs):
@@ -392,6 +397,26 @@ class TestEntryLookup:
         assert entry is not None
         assert entry.name == "alpha"
         assert entry.toolset == "core"
+
+    def test_get_entry_preserves_safety_annotations(self):
+        reg = ToolRegistry()
+        annotations = ToolSafetyAnnotations(
+            read_only=True,
+            destructive=False,
+            idempotent=True,
+            open_world=False,
+        )
+        reg.register(
+            name="safe_read",
+            toolset="core",
+            schema=_make_schema("safe_read"),
+            handler=_dummy_handler,
+            safety_annotations=annotations,
+        )
+
+        entry = reg.get_entry("safe_read")
+        assert entry is not None
+        assert entry.safety_annotations == annotations
 
     def test_get_entry_returns_none_for_unknown_tool(self):
         reg = ToolRegistry()

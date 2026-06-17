@@ -17,7 +17,12 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_mcp_tool(name="read_file", description="Read a file", input_schema=None):
+def _make_mcp_tool(
+    name="read_file",
+    description="Read a file",
+    input_schema=None,
+    annotations=None,
+):
     """Create a fake MCP Tool object matching the SDK interface."""
     tool = SimpleNamespace()
     tool.name = name
@@ -29,6 +34,7 @@ def _make_mcp_tool(name="read_file", description="Read a file", input_schema=Non
         },
         "required": ["path"],
     }
+    tool.annotations = annotations
     return tool
 
 
@@ -3652,6 +3658,50 @@ class TestRegistryCollisionWarning:
             reg.register(name="my_tool", toolset="mcp-server", schema=schema, handler=handler)
 
         assert not any("collision" in r.message.lower() for r in caplog.records)
+
+
+class TestMCPSafetyAnnotations:
+    """MCP safety hints are preserved as registry metadata."""
+
+    def test_mcp_annotations_are_preserved_in_registry(self):
+        from tools.registry import ToolRegistry, ToolSafetyAnnotations
+        from tools.mcp_tool import MCPServerTask, _register_server_tools
+
+        mock_registry = ToolRegistry()
+        annotations = SimpleNamespace(
+            readOnlyHint=True,
+            destructiveHint=False,
+            idempotentHint=True,
+            openWorldHint=False,
+        )
+        server = MCPServerTask("srv")
+        server._tools = [
+            _make_mcp_tool(
+                "lookup",
+                "Look up a record",
+                annotations=annotations,
+            )
+        ]
+
+        with patch("tools.registry.registry", mock_registry):
+            registered = _register_server_tools("srv", server, {})
+
+        assert "mcp_srv_lookup" in registered
+        entry = mock_registry.get_entry("mcp_srv_lookup")
+        assert entry is not None
+        assert entry.safety_annotations == ToolSafetyAnnotations(
+            read_only=True,
+            destructive=False,
+            idempotent=True,
+            open_world=False,
+        )
+
+    def test_missing_annotations_remain_unspecified(self):
+        from tools.mcp_tool import _mcp_tool_safety_annotations
+
+        tool = _make_mcp_tool("lookup", annotations=None)
+
+        assert _mcp_tool_safety_annotations(tool) is None
 
 
 class TestMCPBuiltinCollisionGuard:

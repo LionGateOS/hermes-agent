@@ -3294,6 +3294,27 @@ def sanitize_mcp_name_component(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_]", "_", str(value or ""))
 
 
+def _mcp_tool_safety_annotations(mcp_tool):
+    """Convert MCP ToolAnnotations into registry safety metadata."""
+    from tools.registry import ToolSafetyAnnotations
+
+    annotations = getattr(mcp_tool, "annotations", None)
+    if annotations is None:
+        return None
+
+    def _get(name: str):
+        if isinstance(annotations, dict):
+            return annotations.get(name)
+        return getattr(annotations, name, None)
+
+    return ToolSafetyAnnotations(
+        read_only=_get("readOnlyHint"),
+        destructive=_get("destructiveHint"),
+        idempotent=_get("idempotentHint"),
+        open_world=_get("openWorldHint"),
+    )
+
+
 def _convert_mcp_schema(server_name: str, mcp_tool) -> dict:
     """Convert an MCP tool listing to the Hermes registry schema format.
 
@@ -3587,6 +3608,7 @@ def _register_server_tools(name: str, server: MCPServerTask, config: dict) -> Li
             check_fn=_make_check_fn(name),
             is_async=False,
             description=schema["description"],
+            safety_annotations=_mcp_tool_safety_annotations(mcp_tool),
         )
         _track_mcp_tool_server(tool_name_prefixed, name)
         registered_names.append(tool_name_prefixed)
