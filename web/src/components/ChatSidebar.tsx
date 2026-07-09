@@ -30,7 +30,7 @@ import { Card } from "@nous-research/ui/ui/components/card";
 import { ModelPickerDialog } from "@/components/ModelPickerDialog";
 import { ToolCall, type ToolEntry } from "@/components/ToolCall";
 import { GatewayClient, type ConnectionState } from "@/lib/gatewayClient";
-import { HERMES_BASE_PATH, buildWsAuthParam } from "@/lib/api";
+import { HERMES_BASE_PATH, buildWsAuthParam, api } from "@/lib/api";
 
 import { cn } from "@/lib/utils";
 import { AlertCircle, ChevronDown, RefreshCw } from "lucide-react";
@@ -89,8 +89,22 @@ export function ChatSidebar({ channel, profile, className }: ChatSidebarProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [info, setInfo] = useState<SessionInfo>({});
   const [tools, setTools] = useState<ToolEntry[]>([]);
+  const [toolCallsDefaultExpanded, setToolCallsDefaultExpanded] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getConfig()
+      .then((cfg) => {
+        const display = (cfg?.display ?? {}) as {
+          tool_calls_default_expanded?: unknown;
+        };
+        setToolCallsDefaultExpanded(
+          display.tool_calls_default_expanded === true,
+        );
+      })
+      .catch(() => setToolCallsDefaultExpanded(false));
+  }, []);
 
   // Profile or PTY channel change tears down both WebSockets. Bump `version`
   // (same path as the manual Reconnect button) so the gateway client is
@@ -394,7 +408,7 @@ export function ChatSidebar({ channel, profile, className }: ChatSidebarProps) {
               no tool calls yet
             </div>
           ) : (
-            tools.map((t) => <ToolCall key={t.id} tool={t} />)
+            tools.map((t) => <ToolCall key={t.id} tool={t} defaultExpanded={toolCallsDefaultExpanded} />)
           )}
         </div>
       </Card>

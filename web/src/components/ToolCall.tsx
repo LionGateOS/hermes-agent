@@ -50,13 +50,19 @@ const BULLET_TONE: Record<ToolEntry["status"], string> = {
 
 const TICK_MS = 500;
 
-export function ToolCall({ tool }: { tool: ToolEntry }) {
+export function ToolCall({
+  tool,
+  defaultExpanded = false,
+}: {
+  tool: ToolEntry;
+  defaultExpanded?: boolean;
+}) {
   // `open` is derived: errors default-expanded, everything else collapsed.
   // `null` means "follow the default"; any explicit bool is the user's override.
   // This lets a running tool flip to expanded automatically when it errors,
   // without mirroring state in an effect.
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
-  const open = userOverride ?? tool.status === "error";
+  const open = userOverride ?? (tool.status === "error" || defaultExpanded);
 
   // Tick `now` while the tool is running so the elapsed label updates live.
   const [now, setNow] = useState(() => Date.now());
